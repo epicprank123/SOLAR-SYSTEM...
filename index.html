@@ -1,0 +1,908 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Interactive Solar System Explorer</title>
+    <style>
+        :root {
+            --bg-color: #0b0d17;
+            --panel-bg: rgba(20, 24, 40, 0.85);
+            --text-color: #e0e6ed;
+            --accent-color: #4facfe;
+            --highlight-color: #00f2fe;
+            --border-color: rgba(255, 255, 255, 0.1);
+            --font-main: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: var(--font-main);
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            overflow: hidden; /* Prevent scrolling, full app feel */
+            height: 100vh;
+            width: 100vw;
+            display: flex;
+        }
+
+        /* Layout */
+        #canvas-container {
+            flex-grow: 1;
+            position: relative;
+            background: radial-gradient(circle at center, #1b2735 0%, #090a0f 100%);
+            cursor: move; /* Indicate draggable/pannable area */
+            overflow: hidden;
+        }
+
+        canvas {
+            display: block;
+        }
+
+        /* Sidebar / Info Panel */
+        aside {
+            width: 350px;
+            background: var(--panel-bg);
+            backdrop-filter: blur(10px);
+            border-left: 1px solid var(--border-color);
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            overflow-y: auto;
+            transition: transform 0.3s ease;
+            z-index: 10;
+        }
+
+        h1 {
+            font-size: 1.5rem;
+            margin-bottom: 5px;
+            background: linear-gradient(to right, var(--accent-color), var(--highlight-color));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .subtitle {
+            font-size: 0.85rem;
+            color: #8892b0;
+            margin-bottom: 20px;
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 10px;
+        }
+
+        /* Controls */
+        .controls {
+            margin-bottom: 20px;
+            background: rgba(255, 255, 255, 0.05);
+            padding: 15px;
+            border-radius: 8px;
+        }
+
+        .control-group {
+            margin-bottom: 10px;
+        }
+
+        label {
+            display: block;
+            font-size: 0.8rem;
+            margin-bottom: 5px;
+            color: #aeb8cc;
+        }
+
+        input[type="range"] {
+            width: 100%;
+            cursor: pointer;
+            accent-color: var(--accent-color);
+        }
+
+        .toggle-btn {
+            background: transparent;
+            border: 1px solid var(--accent-color);
+            color: var(--accent-color);
+            padding: 5px 10px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.8rem;
+            transition: all 0.2s;
+        }
+
+        .toggle-btn:hover, .toggle-btn.active {
+            background: var(--accent-color);
+            color: white;
+        }
+
+        /* Planet List */
+        .planet-list {
+            list-style: none;
+            margin-bottom: 20px;
+        }
+
+        .planet-item {
+            padding: 10px;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: background 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            border-bottom: 1px solid rgba(255,255,255,0.05);
+        }
+
+        .planet-item:hover {
+            background: rgba(255, 255, 255, 0.1);
+        }
+
+        .planet-item.active {
+            background: rgba(79, 172, 254, 0.2);
+            border-left: 3px solid var(--accent-color);
+        }
+
+        .planet-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+        }
+
+        /* Details View */
+        #details-view {
+            display: none; /* Hidden by default until selected */
+            animation: fadeIn 0.3s ease;
+        }
+
+        #details-view.visible {
+            display: block;
+        }
+
+        .detail-header {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            margin-bottom: 15px;
+        }
+
+        .detail-icon {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            box-shadow: 0 0 10px rgba(0,0,0,0.5);
+        }
+
+        .detail-title h2 {
+            font-size: 1.4rem;
+            color: var(--highlight-color);
+        }
+
+        .detail-type {
+            font-size: 0.8rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: #8892b0;
+        }
+
+        .detail-stats {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            margin-bottom: 15px;
+            font-size: 0.85rem;
+        }
+
+        .stat-box {
+            background: rgba(0,0,0,0.2);
+            padding: 8px;
+            border-radius: 4px;
+        }
+
+        .stat-label {
+            color: #8892b0;
+            font-size: 0.7rem;
+            display: block;
+        }
+
+        .detail-desc {
+            font-size: 0.9rem;
+            line-height: 1.5;
+            color: #ccd6f6;
+        }
+
+        .fact-tag {
+            display: inline-block;
+            background: rgba(255, 193, 7, 0.15);
+            color: #ffc107;
+            padding: 2px 8px;
+            border-radius: 10px;
+            font-size: 0.7rem;
+            margin-top: 10px;
+            margin-right: 5px;
+        }
+
+        /* Tooltip */
+        #tooltip {
+            position: absolute;
+            background: rgba(0, 0, 0, 0.8);
+            color: white;
+            padding: 5px 10px;
+            border-radius: 4px;
+            font-size: 0.8rem;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.2s;
+            border: 1px solid var(--border-color);
+            z-index: 100;
+            transform: translate(-50%, -150%);
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* Mobile Responsive */
+        @media (max-width: 768px) {
+            body { flex-direction: column; }
+            aside {
+                width: 100%;
+                height: 40%;
+                order: 2;
+                border-left: none;
+                border-top: 1px solid var(--border-color);
+            }
+            #canvas-container { height: 60%; order: 1; }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Main Canvas Area -->
+    <div id="canvas-container">
+        <canvas id="solarCanvas"></canvas>
+        <div id="tooltip">Planet Name</div>
+    </div>
+
+    <!-- Sidebar Controls & Info -->
+    <aside>
+        <div>
+            <h1>Solar System</h1>
+            <p class="subtitle">Interactive 2D Explorer</p>
+        </div>
+
+        <div class="controls">
+            <div class="control-group">
+                <label for="speedRange">Simulation Speed</label>
+                <input type="range" id="speedRange" min="0" max="5" step="0.1" value="1">
+            </div>
+            <div class="control-group" style="display: flex; gap: 10px;">
+                <button id="toggleOrbits" class="toggle-btn active">Orbits</button>
+                <button id="toggleLabels" class="toggle-btn active">Labels</button>
+            </div>
+        </div>
+
+        <ul class="planet-list" id="planetList">
+            <!-- Populated via JS -->
+        </ul>
+
+        <div id="details-view">
+            <div class="detail-header">
+                <div id="detailIcon" class="detail-icon"></div>
+                <div class="detail-title">
+                    <h2 id="detailName">Earth</h2>
+                    <span id="detailType" class="detail-type">Terrestrial Planet</span>
+                </div>
+            </div>
+            <div class="detail-stats">
+                <div class="stat-box">
+                    <span class="stat-label">Orbit Time</span>
+                    <span id="statOrbit">365 days</span>
+                </div>
+                <div class="stat-box">
+                    <span class="stat-label">Dist. from Sun</span>
+                    <span id="statDist">1 AU</span>
+                </div>
+                <div class="stat-box">
+                    <span class="stat-label">Temp</span>
+                    <span id="statTemp">15°C</span>
+                </div>
+                <div class="stat-box">
+                    <span class="stat-label">Moons</span>
+                    <span id="statMoons">1</span>
+                </div>
+            </div>
+            <div class="detail-desc" id="detailDesc">
+                Description goes here.
+            </div>
+            <div id="detailTags"></div>
+        </div>
+    </aside>
+
+<script>
+/**
+ * Solar System Configuration
+ * Note: Distances and sizes are not to scale (for visibility), 
+ * but relative order and characteristics are preserved.
+ */
+const BODIES = [
+    {
+        id: 'sun',
+        name: 'The Sun',
+        type: 'Star',
+        color: '#FDB813',
+        glow: '#ff6600',
+        radius: 35,
+        distance: 0,
+        speed: 0,
+        orbitColor: 'transparent',
+        desc: "The Boss. Contains 99.8% of the solar system’s mass. Core temp is ~15 million °C.",
+        stats: { temp: '5,500°C (Surf)', orbit: 'N/A', dist: '0 AU', moons: 'N/A' },
+        tags: ['Solar Wind', 'Solar Flares', 'Boss'],
+        features: { sun: true }
+    },
+    {
+        id: 'mercury',
+        name: 'Mercury',
+        type: 'Terrestrial Planet',
+        color: '#A5A5A5',
+        radius: 6,
+        distance: 60,
+        speed: 4.1, // Fast orbit
+        orbitColor: '#333',
+        desc: "Closest to the Sun. No atmosphere. Huge temperature swings. Very fast orbit (88 Earth days).",
+        stats: { temp: '-173 to 427°C', orbit: '88 days', dist: '0.39 AU', moons: '0' },
+        tags: ['No Atmosphere', 'Fastest'],
+        features: { rocky: true }
+    },
+    {
+        id: 'venus',
+        name: 'Venus',
+        type: 'Terrestrial Planet',
+        color: '#E3BB76',
+        radius: 9,
+        distance: 90,
+        speed: 1.6, // Slower than Mercury
+        orbitColor: '#444',
+        desc: "Similar size to Earth. Thick toxic atmosphere. Hottest planet. Rotates backwards.",
+        stats: { temp: '462°C', orbit: '225 days', dist: '0.72 AU', moons: '0' },
+        tags: ['Toxic Atmosphere', 'Retrograde Rotation'],
+        features: { rocky: true }
+    },
+    {
+        id: 'earth',
+        name: 'Earth',
+        type: 'Terrestrial Planet',
+        color: '#22A6B3',
+        radius: 9.5,
+        distance: 130,
+        speed: 1, // Baseline
+        orbitColor: '#4facfe',
+        desc: "The only known planet with life. Has 1 Moon. Atmosphere + clouds.",
+        stats: { temp: '15°C (Avg)', orbit: '365 days', dist: '1 AU', moons: '1' },
+        tags: ['Life', 'Water'],
+        features: { rocky: true, moons: [{ dist: 18, radius: 2, speed: 3, color: '#ddd' }] }
+    },
+    {
+        id: 'mars',
+        name: 'Mars',
+        type: 'Terrestrial Planet',
+        color: '#FF6B6B',
+        radius: 7,
+        distance: 170,
+        speed: 0.53,
+        orbitColor: '#555',
+        desc: "The Red Planet (iron oxide). Thin atmosphere. 2 tiny moons (Phobos & Deimos).",
+        stats: { temp: '-63°C', orbit: '687 days', dist: '1.52 AU', moons: '2' },
+        tags: ['Red Planet', 'Thin Atmosphere'],
+        features: { rocky: true, moons: [{ dist: 12, radius: 1.5, speed: 4, color: '#aaa' }, { dist: 16, radius: 1.2, speed: 3, color: '#999' }] }
+    },
+    {
+        id: 'asteroid_belt',
+        name: 'Asteroid Belt',
+        type: 'Belt',
+        color: '#888',
+        radius: 0, // Calculated dynamically
+        distance: 210, // Between Mars (170) and Jupiter (280)
+        speed: 0.2,
+        orbitColor: 'transparent',
+        desc: "Millions of rocks between Mars and Jupiter. Contains Ceres (dwarf planet).",
+        stats: { temp: '-100°C', orbit: 'Varies', dist: '2.7 AU', moons: 'N/A' },
+        tags: ['Ceres', 'Rocks'],
+        features: { belt: true, count: 150 }
+    },
+    {
+        id: 'jupiter',
+        name: 'Jupiter',
+        type: 'Gas Giant',
+        color: '#D9A066',
+        radius: 22,
+        distance: 280,
+        speed: 0.08,
+        orbitColor: '#666',
+        desc: "Largest planet. Great Red Spot (giant storm). Tons of moons. Strong gravity shield.",
+        stats: { temp: '-108°C', orbit: '12 years', dist: '5.2 AU', moons: '90+' },
+        tags: ['Largest', 'Great Red Spot'],
+        features: { gas: true }
+    },
+    {
+        id: 'saturn',
+        name: 'Saturn',
+        type: 'Gas Giant',
+        color: '#E0C896',
+        radius: 19,
+        distance: 360,
+        speed: 0.03,
+        orbitColor: '#777',
+        desc: "Famous rings. Less dense than water. Many moons (Titan is huge).",
+        stats: { temp: '-139°C', orbit: '29 years', dist: '9.5 AU', moons: '146+' },
+        tags: ['Rings', 'Low Density'],
+        features: { gas: true, rings: { inner: 24, outer: 32, color: 'rgba(200, 180, 140, 0.6)' } }
+    },
+    {
+        id: 'uranus',
+        name: 'Uranus',
+        type: 'Ice Giant',
+        color: '#7DE2F7',
+        radius: 14,
+        distance: 430,
+        speed: 0.01,
+        orbitColor: '#888',
+        desc: "Rotates on its side (98° tilt!!). Blue-green (methane). Very cold.",
+        stats: { temp: '-197°C', orbit: '84 years', dist: '19.2 AU', moons: '27' },
+        tags: ['Tilted 98°', 'Ice Giant'],
+        features: { ice: true, tilt: true }
+    },
+    {
+        id: 'neptune',
+        name: 'Neptune',
+        type: 'Ice Giant',
+        color: '#3E54E8',
+        radius: 13.5,
+        distance: 490,
+        speed: 0.006,
+        orbitColor: '#888',
+        desc: "Deep blue. Strongest winds in solar system. Very slow orbit (165 years).",
+        stats: { temp: '-201°C', orbit: '165 years', dist: '30.1 AU', moons: '14' },
+        tags: ['Strong Winds', 'Deep Blue'],
+        features: { ice: true }
+    },
+    {
+        id: 'kuiper_belt',
+        name: 'Kuiper Belt',
+        type: 'Belt',
+        color: '#AAF',
+        radius: 0,
+        distance: 540,
+        speed: 0.005,
+        orbitColor: 'transparent',
+        desc: "Beyond Neptune. Icy objects. Contains Pluto. Source of short-period comets.",
+        stats: { temp: '-230°C', orbit: '200+ yrs', dist: '30-50 AU', moons: 'N/A' },
+        tags: ['Pluto', 'Comets'],
+        features: { belt: true, count: 100 }
+    }
+];
+
+// App State
+const state = {
+    speedMultiplier: 1,
+    showOrbits: true,
+    showLabels: true,
+    selectedId: null,
+    zoom: 1,
+    offsetX: 0,
+    offsetY: 0,
+    dragging: false,
+    lastMouseX: 0,
+    lastMouseY: 0,
+    bodies: [] // Will hold initialized objects
+};
+
+// Canvas Setup
+const canvas = document.getElementById('solarCanvas');
+const ctx = canvas.getContext('2d');
+const container = document.getElementById('canvas-container');
+const tooltip = document.getElementById('tooltip');
+
+// Resize Canvas
+function resize() {
+    canvas.width = container.clientWidth;
+    canvas.height = container.clientHeight;
+    // Center camera initially
+    state.offsetX = canvas.width / 2;
+    state.offsetY = canvas.height / 2;
+}
+window.addEventListener('resize', resize);
+resize();
+
+// Initialization
+class CelestialBody {
+    constructor(data) {
+        this.data = data;
+        this.angle = Math.random() * Math.PI * 2;
+        
+        // Generate random belt particles if this is a belt
+        this.particles = [];
+        if (data.features.belt) {
+            for(let i=0; i<data.features.count; i++) {
+                // Spread particles in a ring around the distance
+                const spread = 25; 
+                const r = data.distance + (Math.random() - 0.5) * spread;
+                const a = Math.random() * Math.PI * 2;
+                this.particles.push({ r, a, size: Math.random() * 1.5 + 0.5 });
+            }
+        }
+    }
+
+    update() {
+        // Update Angle based on speed
+        this.angle += (this.data.speed * 0.005) * state.speedMultiplier;
+        
+        // Update belt particles
+        if (this.data.features.belt) {
+            this.particles.forEach(p => {
+                p.a += (0.002 / (p.r/100)) * state.speedMultiplier; // Inner ones orbit faster
+            });
+        }
+    }
+
+    draw(ctx) {
+        const cx = state.offsetX;
+        const cy = state.offsetY;
+        
+        // 1. Draw Orbit Path (except Sun and Belts)
+        if (state.showOrbits && this.data.distance > 0 && !this.data.features.belt) {
+            ctx.beginPath();
+            ctx.arc(cx, cy, this.data.distance * state.zoom, 0, Math.PI * 2);
+            ctx.strokeStyle = this.data.orbitColor;
+            ctx.lineWidth = 1;
+            ctx.globalAlpha = 0.3;
+            ctx.stroke();
+            ctx.globalAlpha = 1.0;
+        }
+
+        // Calculate Position
+        const x = cx + Math.cos(this.angle) * (this.data.distance * state.zoom);
+        const y = cy + Math.sin(this.angle) * (this.data.distance * state.zoom);
+
+        // Draw Belt Particles
+        if (this.data.features.belt) {
+            ctx.fillStyle = this.data.color;
+            this.particles.forEach(p => {
+                const px = cx + Math.cos(p.a) * (p.r * state.zoom);
+                const py = cy + Math.sin(p.a) * (p.r * state.zoom);
+                ctx.globalAlpha = 0.6;
+                ctx.beginPath();
+                ctx.arc(px, py, p.size * state.zoom, 0, Math.PI * 2);
+                ctx.fill();
+            });
+            ctx.globalAlpha = 1.0;
+            return; // Belts don't have a main central body icon to click
+        }
+
+        // 2. Draw Sun / Planet Body
+        ctx.save();
+        ctx.translate(x, y);
+
+        // Draw Selection Halo
+        if (state.selectedId === this.data.id) {
+            ctx.beginPath();
+            ctx.arc(0, 0, (this.data.radius * state.zoom) + 8, 0, Math.PI * 2);
+            ctx.strokeStyle = '#00f2fe';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+        }
+
+        // Rings (Saturn) - Draw behind planet half
+        if (this.data.features.rings) {
+            ctx.save();
+            ctx.rotate(Math.PI / 6); // Tilt rings slightly
+            ctx.beginPath();
+            ctx.ellipse(0, 0, this.data.features.rings.outer * state.zoom, (this.data.features.rings.outer/3) * state.zoom, 0, 0, Math.PI * 2);
+            ctx.strokeStyle = this.data.features.rings.color;
+            ctx.lineWidth = (this.data.features.rings.outer - this.data.features.rings.inner) * state.zoom;
+            ctx.globalAlpha = 0.6;
+            ctx.stroke();
+            ctx.globalAlpha = 1.0;
+            ctx.restore();
+        }
+
+        // Main Circle
+        ctx.beginPath();
+        ctx.arc(0, 0, this.data.radius * state.zoom, 0, Math.PI * 2);
+        ctx.fillStyle = this.data.color;
+        
+        // Sun Glow
+        if (this.data.features.sun) {
+            ctx.shadowBlur = 40;
+            ctx.shadowColor = this.data.glow;
+            // Solar wind particle effect approximation (simple pulses)
+            const pulse = 1 + Math.sin(Date.now() / 200) * 0.05;
+            ctx.scale(pulse, pulse);
+        } else {
+            ctx.shadowBlur = 0;
+        }
+        
+        ctx.fill();
+        ctx.shadowBlur = 0; // Reset
+
+        // Uranus Tilt Visualization
+        if (this.data.features.tilt) {
+             ctx.beginPath();
+             ctx.moveTo(0, -(this.data.radius * state.zoom));
+             ctx.lineTo(0, (this.data.radius * state.zoom));
+             ctx.strokeStyle = 'rgba(255,255,255,0.3)';
+             ctx.lineWidth = 1;
+             ctx.stroke();
+        }
+
+        // Moons
+        if (this.data.features.moons) {
+            this.data.features.moons.forEach(moon => {
+                const moonAngle = this.angle * moon.speed * 10; // Arbitrary speed multiplier for moon orbit
+                const mx = Math.cos(moonAngle) * (moon.dist * state.zoom);
+                const my = Math.sin(moonAngle) * (moon.dist * state.zoom);
+                
+                ctx.beginPath();
+                ctx.arc(mx, my, moon.radius * state.zoom, 0, Math.PI * 2);
+                ctx.fillStyle = moon.color;
+                ctx.fill();
+            });
+        }
+
+        // Labels
+        if (state.showLabels) {
+            ctx.fillStyle = '#fff';
+            ctx.font = `12px ${getComputedStyle(document.body).fontFamily}`;
+            ctx.textAlign = 'center';
+            ctx.fillText(this.data.name, 0, (this.data.radius * state.zoom) + 15);
+        }
+
+        ctx.restore();
+
+        // Store current screen coordinates for hit testing
+        this.screenX = x;
+        this.screenY = y;
+    }
+}
+
+// Initialize bodies
+state.bodies = BODIES.map(b => new CelestialBody(b));
+
+// UI Builder
+function buildUI() {
+    const list = document.getElementById('planetList');
+    
+    BODIES.forEach(body => {
+        const li = document.createElement('li');
+        li.className = 'planet-item';
+        li.dataset.id = body.id;
+        li.innerHTML = `
+            <div class="planet-dot" style="background-color: ${body.color}; box-shadow: 0 0 5px ${body.color}"></div>
+            <span>${body.name}</span>
+        `;
+        li.addEventListener('click', () => selectBody(body.id));
+        list.appendChild(li);
+    });
+}
+
+function selectBody(id) {
+    state.selectedId = id;
+    
+    // Update Sidebar UI
+    document.querySelectorAll('.planet-item').forEach(el => {
+        el.classList.toggle('active', el.dataset.id === id);
+    });
+
+    const data = BODIES.find(b => b.id === id);
+    const detailsView = document.getElementById('details-view');
+    
+    if (data) {
+        detailsView.classList.add('visible');
+        document.getElementById('detailName').textContent = data.name;
+        document.getElementById('detailType').textContent = data.type;
+        document.getElementById('detailDesc').textContent = data.desc;
+        document.getElementById('detailIcon').style.backgroundColor = data.color;
+        document.getElementById('detailIcon').style.boxShadow = `0 0 15px ${data.color}`;
+        
+        // Stats
+        document.getElementById('statOrbit').textContent = data.stats.orbit;
+        document.getElementById('statDist').textContent = data.stats.dist;
+        document.getElementById('statTemp').textContent = data.stats.temp;
+        document.getElementById('statMoons').textContent = data.stats.moons;
+
+        // Tags
+        const tagContainer = document.getElementById('detailTags');
+        tagContainer.innerHTML = '';
+        data.tags.forEach(tag => {
+            const t = document.createElement('span');
+            t.className = 'fact-tag';
+            t.textContent = tag;
+            tagContainer.appendChild(t);
+        });
+
+        // Auto-center view (optional, but nice)
+        // We won't hard snap, just highlight
+    } else {
+        detailsView.classList.remove('visible');
+    }
+}
+
+// Animation Loop
+function animate() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    // Draw Stars (Static background noise)
+    // Just drawing random dots every frame is expensive, but for simple 2D it's okay. 
+    // Better: Draw once to an offscreen canvas, but let's keep it simple here.
+    // We will simulate stars by having a function that draws them relative to offset
+    drawStars();
+
+    state.bodies.forEach(body => {
+        body.update();
+        body.draw(ctx);
+    });
+
+    requestAnimationFrame(animate);
+}
+
+function drawStars() {
+    ctx.fillStyle = '#FFF';
+    // Pseudo-random stars based on coordinates to create infinite scroll feel
+    // Using a simple hash of coordinate/size to keep them consistent while panning
+    const gridSize = 100;
+    const startX = Math.floor((-state.offsetX) / gridSize) * gridSize;
+    const startY = Math.floor((-state.offsetY) / gridSize) * gridSize;
+    
+    for(let x = startX; x < startX + canvas.width + gridSize; x += gridSize) {
+        for(let y = startY; y < startY + canvas.height + gridSize; y += gridSize) {
+            // Simple pseudo-random generator
+            const seed = Math.sin(x * 12.9898 + y * 78.233) * 43758.5453;
+            const rand = seed - Math.floor(seed);
+            
+            if (rand > 0.8) { // 20% chance of star in this grid cell
+                const sx = x + ((state.offsetX % gridSize) + gridSize) % gridSize; // Wrap logic
+                const sy = y + ((state.offsetY % gridSize) + gridSize) % gridSize;
+                // Actually, simpler logic: Just map screen coords to a fixed noise function
+            }
+        }
+    }
+    
+    // Simplified Starfield:
+    // Just draw 200 random stars on screen that move slightly with parallax
+    // Actually, let's just keep them static on the screen for this version to reduce motion sickness, 
+    // as the user is panning the solar system, not moving through space.
+    ctx.save();
+    ctx.globalAlpha = 0.4;
+    for(let i=0; i<200; i++) {
+        // Deterministic positions based on index
+        const px = (Math.sin(i) * 43758.5453) % 1 * canvas.width;
+        const py = (Math.cos(i) * 2134.2312) % 1 * canvas.height;
+        // Handle negatives
+        const fx = px < 0 ? -px : px;
+        const fy = py < 0 ? -py : py;
+        
+        ctx.beginPath();
+        ctx.arc(fx, fy, Math.random() > 0.9 ? 1.5 : 0.8, 0, Math.PI * 2);
+        ctx.fill();
+    }
+    ctx.restore();
+}
+
+// Interaction Logic
+canvas.addEventListener('mousedown', e => {
+    state.dragging = true;
+    state.lastMouseX = e.clientX;
+    state.lastMouseY = e.clientY;
+    canvas.style.cursor = 'grabbing';
+});
+
+window.addEventListener('mouseup', () => {
+    state.dragging = false;
+    canvas.style.cursor = 'move';
+});
+
+canvas.addEventListener('mousemove', e => {
+    // Panning
+    if (state.dragging) {
+        const dx = e.clientX - state.lastMouseX;
+        const dy = e.clientY - state.lastMouseY;
+        state.offsetX += dx;
+        state.offsetY += dy;
+        state.lastMouseX = e.clientX;
+        state.lastMouseY = e.clientY;
+    }
+
+    // Hover / Tooltip logic
+    const rect = canvas.getBoundingClientRect();
+    const mouseX = e.clientX - rect.left;
+    const mouseY = e.clientY - rect.top;
+
+    let hoveredBody = null;
+    // Check collision with bodies (reverse order to catch top items first)
+    for (let i = state.bodies.length - 1; i >= 0; i--) {
+        const b = state.bodies[i];
+        if (b.data.features.belt) continue; // Don't hover belts
+        
+        const dx = mouseX - b.screenX;
+        const dy = mouseY - b.screenY;
+        const dist = Math.sqrt(dx*dx + dy*dy);
+        
+        // Hit area slightly larger than visual radius
+        if (dist < (b.data.radius * state.zoom) + 5) {
+            hoveredBody = b;
+            break;
+        }
+    }
+
+    if (hoveredBody) {
+        canvas.style.cursor = 'pointer';
+        tooltip.style.opacity = 1;
+        tooltip.style.left = hoveredBody.screenX + 'px';
+        tooltip.style.top = hoveredBody.screenY + 'px';
+        tooltip.textContent = hoveredBody.data.name;
+    } else {
+        if (!state.dragging) canvas.style.cursor = 'move';
+        tooltip.style.opacity = 0;
+    }
+});
+
+canvas.addEventListener('click', e => {
+    // If we dragged, don't count as click
+    // (Simplification: just check hover state)
+    const rect = canvas.getBoundingClientRect();
+    const mouseX = e.clientX - rect.left;
+    const mouseY = e.clientY - rect.top;
+
+    for (let i = state.bodies.length - 1; i >= 0; i--) {
+        const b = state.bodies[i];
+        if (b.data.features.belt) continue;
+        
+        const dx = mouseX - b.screenX;
+        const dy = mouseY - b.screenY;
+        const dist = Math.sqrt(dx*dx + dy*dy);
+        
+        if (dist < (b.data.radius * state.zoom) + 5) {
+            selectBody(b.data.id);
+            return;
+        }
+    }
+    // Clicked empty space
+    state.selectedId = null;
+    document.querySelectorAll('.planet-item').forEach(el => el.classList.remove('active'));
+    document.getElementById('details-view').classList.remove('visible');
+});
+
+canvas.addEventListener('wheel', e => {
+    e.preventDefault();
+    const zoomSensitivity = 0.001;
+    const delta = -e.deltaY * zoomSensitivity;
+    const newZoom = state.zoom + delta;
+    
+    // Clamp zoom
+    if (newZoom > 0.2 && newZoom < 3) {
+        state.zoom = newZoom;
+    }
+});
+
+// Control Event Listeners
+document.getElementById('speedRange').addEventListener('input', (e) => {
+    state.speedMultiplier = parseFloat(e.target.value);
+});
+
+document.getElementById('toggleOrbits').addEventListener('click', (e) => {
+    state.showOrbits = !state.showOrbits;
+    e.target.classList.toggle('active', state.showOrbits);
+});
+
+document.getElementById('toggleLabels').addEventListener('click', (e) => {
+    state.showLabels = !state.showLabels;
+    e.target.classList.toggle('active', state.showLabels);
+});
+
+// Start
+buildUI();
+animate();
+
+</script>
+</body>
+</html>
